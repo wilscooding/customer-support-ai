@@ -8,6 +8,14 @@ import {
 	Typography,
 	useTheme,
 	useMediaQuery,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
 } from "@mui/material";
 import { useState, useRef, useEffect } from "react";
 
@@ -22,6 +30,9 @@ export default function Home() {
 	]);
 	const [message, setMessage] = useState("");
 	const [isLoading, setIsLoading] = useState(false);
+	const [provider, setProvider] = useState("gemini");
+  const [showWarning, setShowWarning] = useState(false);
+  const [pendingProvider, setPendingProvider] = useState("");
 	const messagesEndRef = useRef(null);
 
 	const sendMessage = async () => {
@@ -30,7 +41,7 @@ export default function Home() {
 
 		setMessages((messages) => [
 			...messages,
-			{ role: "user", content: message },
+			{ role: "user", content: message, provider },
 			{ role: "assistant", content: "" },
 		]);
 
@@ -42,7 +53,7 @@ export default function Home() {
 				},
 				body: JSON.stringify([
 					...messages,
-					{ role: "user", content: message },
+					{ role: "user", content: message, provider },
 				]),
 			});
 
@@ -86,6 +97,27 @@ export default function Home() {
 			sendMessage();
 		}
 	};
+
+  const handleProviderChange = (event) => {
+    const newProvider = event.target.value;
+    if (provider !== newProvider) {
+      setPendingProvider(newProvider);
+      setShowWarning(true);
+    }
+  };
+
+  const handleConfirmChange = () => {
+    setShowWarning(false);
+    setMessages([]);
+    setProvider(pendingProvider);
+    setPendingProvider("");
+  }
+
+  const handleCancelChange = () => {
+    setShowWarning(false);
+  };
+
+
 
 	const scrollToBottom = () => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -163,6 +195,19 @@ export default function Home() {
 						bgcolor: "#ffffff", // white background for input area
 					}}
 				>
+					<FormControl sx={{ minWidth: 120 }}>
+						<InputLabel id="provider-select-label">Provider</InputLabel>
+						<Select
+							labelId="provider-select-label"
+							id="provider-select"
+							value={provider}
+							label="Provider"
+							onChange={handleProviderChange}
+						>
+							<MenuItem value="gemini">Google Gemini</MenuItem>
+							<MenuItem value="bedrock">AWS Bedrock</MenuItem>
+						</Select>
+					</FormControl>
 					<TextField
 						label="Message"
 						fullWidth
@@ -182,6 +227,20 @@ export default function Home() {
 					</Button>
 				</Stack>
 			</Stack>
+
+      <Dialog open={showWarning} onClose={handleCancelChange}>
+        <DialogTitle>Change Model</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Changing the model will start a new chat. Are you sure you want to proceed?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelChange} color="primary">Cancel</Button>
+          <Button onClick={handleConfirmChange} color="primary">Confirm</Button>
+        </DialogActions>
+
+      </Dialog>
 		</Box>
 	);
 }
