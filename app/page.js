@@ -130,6 +130,12 @@ export default function Home() {
 		);
 	};
 
+	const formatText = (text) => {
+		text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+		text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+		return text;
+	  };
+
 	const scrollToBottom = () => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 	};
@@ -187,7 +193,13 @@ export default function Home() {
 									wordBreak: "break-word",
 								}}
 							>
-								{message.content}
+								{message.role == "user" 
+								? (message.content) 
+								: (
+									<div
+									  dangerouslySetInnerHTML={{ __html: formatText(message.content) }}
+									/>
+								)}
 							</Box>
 							{message.role === "assistant" && index !== 0 && (
 								<Rating
