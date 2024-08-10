@@ -20,6 +20,8 @@ import {
 } from "@mui/material";
 import { useState, useRef, useEffect } from "react";
 import StarIcon from '@mui/icons-material/Star';
+import {marked} from 'marked'
+import DOMPurify from 'dompurify'
 
 export default function Home() {
 	const theme = useTheme();
@@ -130,11 +132,10 @@ export default function Home() {
 		);
 	};
 
-	const formatText = (text) => {
-		text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-		text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-		return text;
-	  };
+	const parseMarkdown = (text) => {
+		const rawHTML = marked(text);
+		return DOMPurify.sanitize(rawHTML)
+	}
 
 	const scrollToBottom = () => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -195,11 +196,7 @@ export default function Home() {
 							>
 								{message.role == "user" 
 								? (message.content) 
-								: (
-									<div
-									  dangerouslySetInnerHTML={{ __html: formatText(message.content) }}
-									/>
-								)}
+								: (<div dangerouslySetInnerHTML={{ __html: parseMarkdown(message.content) }} />)}
 							</Box>
 							{message.role === "assistant" && index !== 0 && (
 								<Rating
