@@ -1,51 +1,57 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { fetchHealthlineContent } from "./fetchHealthlineContent";
+import { generateEmbeddings } from "./generateEmbeddings";
+import { pinecone, indexName } from "./pineconeClient";
+import { invokeModel } from "./bedrockClient";
+import { generateContent } from "./googleGenerativeAI";
 import { TextEncoder } from "util";
-import {
-	BedrockRuntimeClient,
-	InvokeModelCommand,
-} from "@aws-sdk/client-bedrock-runtime";
-
-const bedrockClient = new BedrockRuntimeClient({
-	region: process.env.AWS_REGION,
-	credentials: {
-		accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-		secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-	},
-});
-
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-const systemPrompt =
-	"You are a helpful assistant. Answer questions concisely.";
 
 export async function POST(req) {
-	const data = await req.json();
 	try {
+		const data = await req.json();
 		const prompt = data.map((msg) => msg.content).join("\nUser: ");
-		let result;
 		const provider = data[data.length - 1].provider;
 
-		if (provider === "bedrock") {
-			const command = new InvokeModelCommand({
-				modelId: "anthropic.claude-instant-v1",
-				body: JSON.stringify({
-					prompt: `Human: ${prompt}\nAssistant:`,
-					max_tokens_to_sample: 300,
-				}),
-			});
+		const healthlineURL = "https://www.healthline.com/nutrition";
+		const textData = await fetchHealthlineContent(healthlineURL);
 
-			const bedrockResponse = await bedrockClient.send(command);
-			result = JSON.parse(
-				new TextDecoder().decode(bedrockResponse.body)
-			).completion;
+		if (!textData) {
+			throw new Error("Failed to fetch content from Healthline.");
+		}
+
+		const embeddings = await generateEmbeddings([textData]);
+
+		const vectors = [
+			{
+				id: `doc-0`,
+				values: embeddings[0],
+				metadata: { text: textData },
+			},
+		];
+
+		await pinecone.index(indexName).upsert(vectors);
+
+		const promptEmbedding = (await generateEmbeddings([prompt]))[0];
+
+		const queryResponse = await pinecone.index(indexName).query({
+			vector: promptEmbedding,
+			topK: 3,
+			includeMetadata: true,
+		});
+
+
+		const concatenatedText = queryResponse.matches
+			.map((match) => match.metadata.text)
+			.join(" ");
+
+		let result;
+
+		if (provider === "bedrock") {
+			result = await invokeModel(prompt);
 		} else if (provider === "gemini") {
-			const googleResult = await model.generateContent(
-				`${systemPrompt}\nUser: ${prompt}`
-			);
-			const response = await googleResult.response;
-			result = await response.text();
+			result = await generateContent(prompt);
+		} else {
+			throw new Error("Invalid provider.");
 		}
 
 		const stream = new ReadableStream({
@@ -65,3 +71,4 @@ export async function POST(req) {
 		return new NextResponse("Internal Server Error", { status: 500 });
 	}
 }
+
